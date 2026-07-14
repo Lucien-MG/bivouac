@@ -1,0 +1,35 @@
+---
+# playbooks/site.yml
+
+- name: Deploy GitOps Applications
+  hosts: all
+  gather_facts: false
+
+  vars:
+    app_data_path: "/home/nomad/app-data"
+
+  pre_tasks:
+    - name: Load global configuration overrides
+      ansible.builtin.include_vars:
+        file: ../config.yml
+      ignore_errors: yes
+
+  tasks:
+    - name: Execute deployment loop for all active apps
+      ansible.builtin.include_tasks: deploy_app.yml
+      with_fileglob:
+        - "../apps/*.yml"
+      loop_control:
+        loop_var: current_app_file
+
+  handlers:
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes
+        scope: user
+
+    - name: Restart container service
+      ansible.builtin.systemd:
+        name: "{{ app_name }}"
+        state: restarted
+        scope: user

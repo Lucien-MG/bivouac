@@ -1,0 +1,13 @@
+---
+# apps/homepage.yml
+app_name: homepage
+image: ghcr.io/gethomepage/homepage:latest
+ports:
+  - "3000:3000"
+volumes:
+  # The :Z is crucial here. Homepage will attempt to write default 
+  # config files to this directory as soon as it boots.
+  - "{{ app_data_path }}/homepage:/app/config:Z"
+env_vars:
+  HOMEPAGE_ALLOWED_HOSTS: "*"
+  # ou "*" pour tout autoriser

@@ -1,0 +1,8 @@
+[Unit]
+Description=Autonomous GitOps Sync via Ansible Pull
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Inject the variables defined in config.yml
+ExecStart=ansible-pull -U {{ gitops_repo_url }} -C {{ gitops_branch }} -i localhost, -c local playbooks/site.yml

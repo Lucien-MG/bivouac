@@ -1,0 +1,48 @@
+---
+# playbooks/deploy_app.yml
+
+- name: Load configuration for the current app
+  ansible.builtin.include_vars:
+    file: "{{ current_app_file }}"
+  become: false
+
+- name: Ensure persistent data directory exists for {{ app_name }}
+  ansible.builtin.file:
+    path: "{{ app_data_path }}/{{ app_name }}"
+    state: directory
+    mode: '0755'
+  become: false
+
+- name: Generate systemd Quadlet for {{ app_name }}
+  ansible.builtin.template:
+    src: ../templates/container/quadlet.container.j2
+    dest: "~/.config/containers/systemd/{{ app_name }}.container"
+    mode: '0644'
+  become: false
+  register: quadlet_file
+
+- name: Force restart if Quadlet configuration changed
+  ansible.builtin.systemd:
+    name: "{{ app_name }}.service"
+    scope: user
+    daemon_reload: yes
+    state: restarted
+  become: false
+  when: quadlet_file.changed
+
+- name: Ensure {{ app_name }} service is enabled and started
+  ansible.builtin.systemd:
+    name: "{{ app_name }}.service"
+    scope: user
+    daemon_reload: yes
+    state: started
+    enabled: yes
+  become: false
+
+#- name: Open firewall ports for {{ app_name }}
+#  ansible.posix.firewalld:
+#    port: "{{ item.split(':')[0] }}/tcp"
+#    permanent: yes
+#    immediate: yes
+#    state: enabled
+#  loop: "{{ ports | default([]) }}"

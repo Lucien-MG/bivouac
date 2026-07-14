@@ -1,0 +1,14 @@
+---
+# apps/portainer.yml
+app_name: portainer
+image: docker.io/portainer/portainer-ce:latest
+ports:
+  - "9000:9000"
+  - "9443:9443"
+volumes:
+  # Les données persistantes de Portainer avec les bons droits SELinux
+  - "{{ app_data_path }}/portainer:/data:Z"
+  # Le point vital : le montage du socket Podman
+  # %t est une variable systemd dynamique qui pointe vers /run/user/UID
+  # NE METS SURTOUT PAS de :Z sur cette ligne, ça détruirait les permissions du socket sur ton hôte
+  - "%t/podman/podman.sock:/var/run/docker.sock"

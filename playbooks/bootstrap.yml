@@ -1,0 +1,153 @@
+---
+# ====================================================================
+# PLAY 1: ROOT PRIVILEGES (System Configuration & User Birth)
+# ====================================================================
+- name: Universal OS Bootstrap - System Setup
+  hosts: all
+  become: yes
+
+  vars:
+    target_user: "nomad"
+    # We no longer rely on a pasted string. Ansible will read your local file.
+
+  pre_tasks:
+    - name: Load override configuration if it exists
+      ansible.builtin.include_vars:
+        file: ../config.yml
+      ignore_errors: yes
+
+  tasks:
+    - name: Create firewall-admins group
+      ansible.builtin.group:
+        name: firewall-admins
+        state: present
+    
+    - name: Allow firewall-admins to modify firewalld without password via Polkit
+      ansible.builtin.copy:
+        dest: /etc/polkit-1/rules.d/50-firewalld-nopasswd.rules
+        content: |
+          polkit.addRule(function(action, subject) {
+              if (action.id.startsWith("org.fedoraproject.FirewallD1.") &&
+                  subject.isInGroup("firewall-admins")) {
+                  return polkit.Result.YES;
+              }
+          });
+        mode: '0644'
+
+    - name: Create the secure container user with the correct OS admin group
+      ansible.builtin.user:
+        name: "{{ target_user }}"
+        state: present
+        groups: "firewall-admins"
+        append: yes
+        create_home: yes
+        shell: /bin/bash
+
+    - name: Deploy the SSH public key for the new user (Reads directly from your laptop)
+      ansible.posix.authorized_key:
+        user: "{{ target_user }}"
+        state: present
+        # Dynamically grabs your public key so it is guaranteed to match
+        key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_ed25519.pub') }}"
+
+    - name: Allocate subuid range for rootless containers
+      ansible.builtin.lineinfile:
+        path: /etc/subuid
+        regexp: "^{{ target_user }}:"
+        line: "{{ target_user }}:100000:65536"
+        create: yes
+        mode: '0644'
+
+    - name: Allocate subgid range for rootless containers
+      ansible.builtin.lineinfile:
+        path: /etc/subgid
+        regexp: "^{{ target_user }}:"
+        line: "{{ target_user }}:100000:65536"
+        create: yes
+        mode: '0644'
+
+    - name: Enable systemd lingering
+      ansible.builtin.command:
+        cmd: "loginctl enable-linger {{ target_user }}"
+
+    - name: Reset SSH connection to clear multiplexing cache before switching users
+      ansible.builtin.meta: reset_connection
+
+
+# ====================================================================
+# PLAY 2: USER PRIVILEGES (Rootless Systemd Configuration)
+# ====================================================================
+- name: Configure Rootless Services
+  hosts: all
+  # Connect directly as the new user via a fresh, clean SSH tunnel
+  remote_user: "nomad" 
+  gather_facts: false
+
+  vars:
+    target_user: "nomad"
+    app_data_path: "~/app-data"
+
+  pre_tasks:
+    - name: Load override configuration if it exists
+      ansible.builtin.include_vars:
+        file: ../config.yml
+      ignore_errors: yes
+
+  tasks:
+    - name: Create the Quadlet and app data directory structure
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "~/.config/containers/systemd"
+        - "~/.config/systemd/user"
+        - "~/app-data"
+    
+    - name: Deploy dynamic GitOps Sync Service
+      ansible.builtin.template:
+        src: ../templates/gitops/sync.service.j2
+        dest: "~/.config/systemd/user/gitops-sync.service"
+        mode: '0644'
+      notify: 
+        - Reload user systemd daemon
+        - Restart GitOps Sync Service
+
+    - name: Deploy GitOps Sync Timer
+      ansible.builtin.template: 
+        src: ../templates/gitops/sync.timer.j2
+        dest: "~/.config/systemd/user/gitops-sync.timer"
+        mode: '0644'
+      notify: 
+        - Reload user systemd daemon
+        - Restart GitOps Sync Timer
+
+    - name: Reload systemd daemon and configure Timer
+      ansible.builtin.systemd:
+        name: gitops-sync.timer
+        # If either file changed, restart the timer. Otherwise, just ensure it's started.
+        state: 'started'
+        enabled: yes
+        # This tells the module to atomic-reload systemd BEFORE applying the state
+        daemon_reload: yes
+        scope: user
+
+  # Handlers execute in the exact order they are defined below, 
+  # regardless of the order they were notified in the tasks.
+  handlers:
+    - name: Reload user systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes
+        scope: user
+
+    - name: Restart GitOps Sync Service
+      ansible.builtin.systemd:
+        name: gitops-sync.service
+        state: restarted
+        scope: user
+
+    - name: Restart GitOps Sync Timer
+      ansible.builtin.systemd:
+        name: gitops-sync.timer
+        state: restarted
+        scope: user

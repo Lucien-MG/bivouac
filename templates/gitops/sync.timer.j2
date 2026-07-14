@@ -1,0 +1,13 @@
+[Unit]
+Description=Run GitOps Sync Regularly
+
+[Timer]
+# Wait 2 minutes after booting before trying the first sync
+OnBootSec=2min
+# Run every X minutes thereafter
+OnUnitActiveSec=2min
+# Randomize sync time
+RandomizedDelaySec=1min
+
+[Install]
+WantedBy=timers.target

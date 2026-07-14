@@ -1,0 +1,44 @@
+[Unit]
+Description={{ app_name }} Container
+After=network-online.target
+
+[Container]
+Image={{ image }}
+ContainerName={{ app_name }}
+
+# Network mesh attachment (created in the bootstrap playbook)
+# Network=backend-mesh
+
+# Dynamic Ports
+{% for port in ports | default([]) %}
+PublishPort={{ port }}
+{% endfor %}
+
+# Dynamic Volumes
+{% for vol in volumes | default([]) %}
+Volume={{ vol }}
+{% endfor %}
+
+# Dynamic Environment Variables
+{% if env_vars is defined %}
+{% for key, value in env_vars.items() %}
+Environment={{ key }}={{ value }}
+{% endfor %}
+{% endif %}
+
+# Hardened Security Defaults
+
+# Hardened Security Defaults
+NoNewPrivileges=true
+DropCapability=all
+# Add capabilities back only if explicitly requested by the app
+{% for cap in capabilities | default([]) %}
+AddCapability={{ cap }}
+{% endfor %}
+
+[Service]
+TimeoutStartSec=300
+
+[Install]
+# This binds it to the user's session so it starts on boot via lingering
+WantedBy=default.target
