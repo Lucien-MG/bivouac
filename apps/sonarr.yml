@@ -1,0 +1,22 @@
+---
+# apps/sonarr.yml
+app_name: sonarr
+image: lscr.io/linuxserver/sonarr:latest
+ports:
+  - "8989:8989"
+volumes:
+  # App configuration database (:Z because it's strictly private to Sonarr)
+  - "{{ app_data_path }}/sonarr/config:/config:Z"
+  
+  # Media and Downloads directories.
+  # IMPORTANT: We use the lowercase :z flag here instead of :Z.
+  # The lowercase :z tells SELinux to allow MULTIPLE containers (like Radarr, 
+  # Transmission, Plex, etc.) to read/write to these exact same folders.
+  - "{{ app_data_path }}/downloads:/downloads:z"
+  - "{{ app_data_path }}/media/tv:/tv:z"
+env_vars:
+  # Forces Sonarr to write files using your 'nomad' user's IDs 
+  # (assuming nomad is the first user created, UID/GID are usually 1000)
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "Europe/Paris"
