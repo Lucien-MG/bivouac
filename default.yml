@@ -1,0 +1,8 @@
+---
+# config.yml
+target_user: "nomad"
+target_ssh_key: "ssh-ed25519 AAAAC3... "
+
+# GitOps Variables
+gitops_repo_url: "https://github.com/Lucien-MG/bivouac"
+gitops_branch: "main"
